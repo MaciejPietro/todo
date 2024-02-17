@@ -3,3 +3,6 @@
 
 # Ignore files inside the .vs/todo directory
 .vs/todo/*
+
+bin/*
+obj/*
