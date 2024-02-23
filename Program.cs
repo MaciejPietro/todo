@@ -1,7 +1,10 @@
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore;
 using System.Text;
+using todo.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,13 +16,16 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
 });
 
-
+// For Identity  
+builder.Services.AddIdentity<UserModel, IdentityRole>()
+                .AddEntityFrameworkStores<ApplicationDbContext>()
+                .AddDefaultTokenProviders();
 
 
 builder.Services.AddControllers();
 
 
-
+// Adding Authentication  
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -39,9 +45,9 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddTransient<IAuthService, AuthService>();
+
 builder.Services.AddAuthorization();
-
-
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -55,10 +61,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

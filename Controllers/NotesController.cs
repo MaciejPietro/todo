@@ -2,11 +2,15 @@
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using todo.Models;
 
 namespace todo.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
-    [ApiController, Authorize]
+    [ApiController]
     [Table("Todo")]
     public class NotesController : BaseController
     {
