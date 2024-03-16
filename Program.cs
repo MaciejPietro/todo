@@ -5,8 +5,17 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using todo.Services;
+using Microsoft.Extensions.Logging;
+using System.Security.Principal;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
+using todo.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
+
+
+ConfigurationHelper.Initialize(builder.Configuration);
+
 
 var config = builder.Configuration;
 var connectionString = config.GetConnectionString("DefaultConnection");
@@ -15,6 +24,19 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
 });
+
+// Enable CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        builder => builder.AllowAnyMethod()
+                          .AllowAnyHeader()
+                          .AllowCredentials()
+                           .WithOrigins("http://localhost:5173")
+                          );
+});
+
+
 
 // For Identity  
 builder.Services.AddIdentity<UserModel, IdentityRole>()
@@ -43,6 +65,25 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true
     };
+
+    o.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            context.Token = context.Request.Cookies["bearer"]!;
+
+
+            if (context.Token is not null && AuthService.ValidateToken(context.Token))
+            {
+            } else
+            {
+                context.Fail("Invalid token");
+            }
+
+            return Task.CompletedTask;
+
+        }
+    };
 });
 
 builder.Services.AddTransient<IAuthService, AuthService>();
@@ -60,6 +101,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors("AllowAll");
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

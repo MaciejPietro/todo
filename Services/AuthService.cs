@@ -5,6 +5,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using todo.Helpers;
 
 
 namespace todo.Services
@@ -46,18 +49,17 @@ namespace todo.Services
             return (1, "User created successfully!");
         }
 
-        public async Task<(int, string)> Login(LoginModel model)
+        public async Task<(int, string, UserModel?)> Login(LoginModel model)
         {
-            var user = await userManager.FindByNameAsync(model.Username);
-            if (user == null)
-                return (0, "Invalid username");
-            if (!await userManager.CheckPasswordAsync(user, model.Password))
-                return (0, "Invalid password");
+            var user = await userManager.FindByEmailAsync(model.Email);
+            if (user == null || !await userManager.CheckPasswordAsync(user, model.Password))
+                return (0, "Invalid credentials", null);
+
 
             var userRoles = await userManager.GetRolesAsync(user);
             var authClaims = new List<Claim>
             {
-               new Claim(ClaimTypes.Name, user.UserName),
+               new Claim(ClaimTypes.Name, user.Email),
                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             };
 
@@ -66,13 +68,17 @@ namespace todo.Services
                 authClaims.Add(new Claim(ClaimTypes.Role, userRole));
             }
             string token = GenerateToken(authClaims);
-            return (1, token);
+
+
+            //SetRefreshToken(refreshToken);
+
+            return (1, token, user);
         }
 
 
         private string GenerateToken(IEnumerable<Claim> claims)
         {
-            var tokenOptions = _configuration.GetSection("JwtSettings");
+            var tokenOptions = ConfigurationHelper.config.GetSection("JwtSettings");
 
             var key = Encoding.UTF8.GetBytes(tokenOptions["Key"]!);
 
@@ -93,5 +99,43 @@ namespace todo.Services
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
+
+        public static bool ValidateToken(string authToken)
+        {
+
+            var tokenOptions = ConfigurationHelper.config.GetSection("JwtSettings");
+
+            var key = Encoding.UTF8.GetBytes(tokenOptions["Key"]!);
+
+            var validationParameters = new TokenValidationParameters()
+            {
+                ValidateLifetime = true, // Because there is no expiration in the generated token
+                ValidateAudience = true, // Because there is no audiance in the generated token
+                ValidateIssuer = true,   // Because there is no issuer in the generated token
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = tokenOptions["Issuer"],
+                ValidAudience = tokenOptions["Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(key) // The same key as the one that generate the token
+            };
+
+
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+
+                tokenHandler.ValidateToken(authToken, validationParameters, out SecurityToken validatedToken);
+                var jwt = (JwtSecurityToken) validatedToken;
+
+                return true;
+            }
+            catch (SecurityTokenValidationException ex)
+            {
+                // Log the reason why the token is not valid
+                return false;
+            }
+
+        }
+
+
     }
 }

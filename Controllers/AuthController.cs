@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
+using todo.Models;
 using todo.Services;
 
 namespace todo.Controllers;
@@ -21,17 +23,44 @@ public class AuthController : ControllerBase
 
     [HttpPost]
     [Route("login")]
-    public async Task<IActionResult> Login(LoginModel model)
+    public async Task<IActionResult> Login([FromBody] LoginModel model)
     {
         try
         {
-            if (!ModelState.IsValid)
-                return BadRequest("Invalid payload");
-            var (status, message) = await _authService.Login(model);
+            if (!ModelState.IsValid)  return BadRequest("Invalid payload");
+
+            var (status, message, user) = await _authService.Login(model);
 
             if (status == 0)
+            {
                 return BadRequest(message);
-            return Ok(message);
+            }
+
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Expires = DateTime.UtcNow.AddDays(14),
+            };
+
+            Response.Cookies.Append("bearer", message, cookieOptions);
+
+            var refreshToken = GeterateRefreshToken();
+
+
+            SetRefreshToken(refreshToken);
+
+            if(user is not null)
+            {
+                user.RefreshToken = refreshToken.Token;
+                user.TokenExpires = refreshToken.Expires;
+                user.TokenCreated = refreshToken.Created;
+
+                //TODO return part of user only
+                return Ok(user);
+            }
+
+            return BadRequest("User not found");
+           
         }
         catch (Exception ex)
         {
@@ -39,6 +68,29 @@ public class AuthController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
         }
     }
+
+    private void SetRefreshToken(RefreshToken newRefreshToken)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Expires = newRefreshToken.Expires,
+        };
+
+        Response.Cookies.Append("refreshToken", newRefreshToken.Token, cookieOptions);
+    }
+
+    private RefreshToken GeterateRefreshToken()
+    {
+        var refreshToken = new RefreshToken
+        {
+            Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
+            Expires = DateTime.Now.AddDays(7)
+        };
+
+        return refreshToken;
+    }
+
 
     [Authorize(Roles = "Admin")]
     [HttpPost]
